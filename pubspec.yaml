@@ -1,0 +1,28 @@
+name: pkb_screen_guard
+description: >
+  Protects sensitive UI against screenshots, screen recording, screen mirroring,
+  remote control, and rooted/jailbroken devices on Android and iOS.
+version: 0.0.1
+homepage: https://your-homepage-or-github-url
+publish_to: "https://pub.dev"
+
+environment:
+  sdk: ">=2.18.0 <4.0.0"
+  flutter: ">=3.7.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.pkbstudio.pkbscreenguard
+        pluginClass: PkbScreenGuardPlugin
+      ios:
+        pluginClass: PkbScreenGuardPlugin
