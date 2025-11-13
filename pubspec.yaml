@@ -1,11 +1,8 @@
 name: pkb_screen_guard
-description: >
-  Protects sensitive UI against screenshots, screen recording, screen mirroring,
-  remote control, and rooted/jailbroken devices on Android and iOS.
+description: A Flutter plugin that protects screen security (screenshot, recording, mirroring, root/jailbreak detection).
 version: 0.0.1
 homepage: https://github.com/pirapong/pkb_screen_guard
 repository: https://github.com/pirapong/pkb_screen_guard
-publish_to: "https://pub.dev"
 
 environment:
   sdk: ">=2.18.0 <4.0.0"
