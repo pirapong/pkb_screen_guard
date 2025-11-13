@@ -1,3 +1,3 @@
 ## 0.0.1
-
-* TODO: Describe initial release.
+- Initial release of pkb_screen_guard.
+- Added screen security features for iOS and Android.
