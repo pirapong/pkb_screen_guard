@@ -3,7 +3,7 @@ description: >
   Protects sensitive UI against screenshots, screen recording, screen mirroring,
   remote control, and rooted/jailbroken devices on Android and iOS.
 version: 0.0.1
-homepage: https://your-homepage-or-github-url
+homepage: https://github.com/pirapong/pkb_screen_guard
 publish_to: "https://pub.dev"
 
 environment:
