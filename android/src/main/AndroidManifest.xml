@@ -1,3 +1,8 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.example.pkb_screen_guard">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+
+    <application>
+        <!-- ปลั๊กอินไม่มี activity ก็ปล่อยว่างได้ -->
+    </application>
 </manifest>

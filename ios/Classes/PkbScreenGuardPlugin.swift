@@ -1,284 +1,270 @@
-import Flutter
-import UIKit
+import 'dart:async';
+import 'package:flutter/material.dart';
+import 'package:pkb_screen_guard/pkb_screen_guard.dart';
 
-public class PkbScreenGuardPlugin: NSObject, FlutterPlugin, FlutterStreamHandler {
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const DemoApp());
+}
 
-    private var eventSink: FlutterEventSink?
-    private var overlayWindow: UIWindow?
+class DemoApp extends StatelessWidget {
+  const DemoApp({super.key});
 
-    // Observer tokens
-    private var screenCaptureObserver: NSObjectProtocol?
-    private var isMonitoring = false
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'pkb_screen_guard Example',
+      theme: ThemeData(useMaterial3: true),
+      home: const GuardHomePage(),
+    );
+  }
+}
 
-    // MARK: - Register Plugin
+class GuardHomePage extends StatefulWidget {
+  const GuardHomePage({super.key});
 
-    public static func register(with registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(
-            name: "pkb_screen_guard/methods",
-            binaryMessenger: registrar.messenger()
-        )
+  @override
+  State<GuardHomePage> createState() => _GuardHomePageState();
+}
 
-        let event = FlutterEventChannel(
-            name: "pkb_screen_guard/events",
-            binaryMessenger: registrar.messenger()
-        )
+class _GuardHomePageState extends State<GuardHomePage> {
+  bool? _rooted;
+  PkbOverlayStatus? _overlayStatus;
+  PkbAasStatus? _aasStatus;
+  Map<String, dynamic>? _remoteStatus;
 
-        let instance = PkbScreenGuardPlugin()
-        registrar.addMethodCallDelegate(instance, channel: channel)
-        event.setStreamHandler(instance)
+  final List<Map<String, dynamic>> _events = [];
+  StreamSubscription<Map<String, dynamic>>? _sub;
 
-        // ⭐ Auto start monitoring
-        instance.startMonitoringInternal()
+  @override
+  void initState() {
+    super.initState();
+    _initGuard();
+  }
 
-        print("[pkb_screen_guard] Plugin registered & auto-monitoring started")
-    }
+  Future<void> _initGuard() async {
+    final rooted = await PkbScreenGuard.checkRooted();
+    setState(() => _rooted = rooted);
 
-    // MARK: - Flutter MethodChannel
+    _sub ??= PkbScreenGuard.events().listen((event) async {
+      setState(() {
+        _events.insert(0, {
+          'ts': DateTime.now().toIso8601String(),
+          ...event,
+        });
+      });
 
-    public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-        print("[pkb_screen_guard] method call: \(call.method)")
-        switch call.method {
-        case "enableSecure":
-            result(nil) // iOS ไม่มี FLAG_SECURE แบบ Android
-        case "disableSecure":
-            result(nil)
-        case "startMonitoring":
-            startMonitoringInternal()
-            result(nil)
-        case "stopMonitoring":
-            stopMonitoringInternal()
-            result(nil)
-        case "showOverlay":
-            showOverlay()
-            result(nil)
-        case "hideOverlay":
-            hideOverlay()
-            result(nil)
-        case "checkRooted":
-            result(isDeviceJailbroken())
-        default:
-            result(FlutterMethodNotImplemented)
-        }
-    }
+      if (event['event'] == 'remoteAppDetected') {
+        await PkbScreenGuard.showOverlay();
 
-    // MARK: - EventChannel
-
-    public func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
-        self.eventSink = events
-        return nil
-    }
-
-    public func onCancel(withArguments arguments: Any?) -> FlutterError? {
-        self.eventSink = nil
-        return nil
-    }
-
-    private func sendEvent(_ data: [String: Any]) {
-        DispatchQueue.main.async { [weak self] in
-            self?.eventSink?(data)
-        }
-    }
-
-    // MARK: - Monitoring
-
-    func startMonitoringInternal() {
-        guard !isMonitoring else { return }
-        isMonitoring = true
-
-        let center = NotificationCenter.default
-
-        if #available(iOS 11.0, *) {
-            screenCaptureObserver = center.addObserver(
-                forName: UIScreen.capturedDidChangeNotification,
-                object: nil,
-                queue: OperationQueue.main
-            ) { [weak self] _ in
-                self?.handleScreenCaptureChanged()
-            }
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => AlertDialog(
+              title: const Text('Security warning'),
+              content: const Text(
+                'Remote screen control detected.\n'
+                'This application cannot be used right now.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
         }
 
-        center.addObserver(
-            self,
-            selector: #selector(screenDidConnect),
-            name: UIScreen.didConnectNotification,
-            object: nil
-        )
+        // SystemNavigator.pop();
+      }
+    });
 
-        center.addObserver(
-            self,
-            selector: #selector(screenDidDisconnect),
-            name: UIScreen.didDisconnectNotification,
-            object: nil
-        )
+    await PkbScreenGuard.enableSecure();
+    await PkbScreenGuard.enableSecurityGuard();
+    await PkbScreenGuard.startMonitoring();
 
-        handleScreenCaptureChanged()
-        handleExternalDisplayChanged()
+    _checkOverlay();
+    _checkAas();
+  }
 
-        print("[pkb_screen_guard] startMonitoringInternal()")
+  Future<void> _checkOverlay() async {
+    final status = await PkbScreenGuard.checkOverlayStatus();
+    setState(() => _overlayStatus = status);
+  }
+
+  Future<void> _checkAas() async {
+    final aas = await PkbScreenGuard.checkAccessibilityServices(
+      allowedInstallers: [
+        'com.android.vending',
+        'com.android.packageinstaller',
+      ],
+      allowedPackages: [],
+    );
+    setState(() => _aasStatus = aas);
+  }
+
+  Future<void> _checkAnyDeskRemote() async {
+    final res = await PkbScreenGuard.checkRemoteActive();
+    setState(() => _remoteStatus = res);
+
+    if (res['remoteActive'] == true) {
+      await PkbScreenGuard.showOverlay();
     }
+  }
 
-    func stopMonitoringInternal() {
-        guard isMonitoring else { return }
-        isMonitoring = false
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
 
-        let center = NotificationCenter.default
-        center.removeObserver(self, name: UIScreen.didConnectNotification, object: nil)
-        center.removeObserver(self, name: UIScreen.didDisconnectNotification, object: nil)
+  @override
+  Widget build(BuildContext context) {
+    final rootedText = _rooted == null
+        ? 'Checking...'
+        : (_rooted == true
+            ? 'Root / Jailbreak detected'
+            : 'No Root / Jailbreak detected');
 
-        if let obs = screenCaptureObserver {
-            center.removeObserver(obs)
-            screenCaptureObserver = nil
-        }
+    final overlayText = _overlayStatus == null
+        ? 'Checking...'
+        : '''
+Draw Over Apps: ${_overlayStatus!.hasOverlay ? "Enabled" : "Disabled"}
+Touch Obscured: ${_overlayStatus!.touchObscured ? "Detected" : "Not detected"}
+''';
 
-        print("[pkb_screen_guard] stopMonitoringInternal()")
-    }
+    final aasText = _aasStatus == null
+        ? 'Checking...'
+        : '''
+Suspicious AAS: ${_aasStatus!.hasSuspiciousAas ? "Detected" : "Not detected"}
+Packages: ${_aasStatus!.suspiciousPackages.join(", ")}
+''';
 
-    // MARK: - Screen Capture Handling
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('pkb_screen_guard Example'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Text(
+            "Device & Security",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          ListTile(
+            leading: const Icon(Icons.security),
+            title: const Text("Root / Jailbreak"),
+            subtitle: Text(rootedText),
+          ),
+          const SizedBox(height: 10),
+          ListTile(
+            leading: const Icon(Icons.layers),
+            title: const Text("Overlay status"),
+            subtitle: Text(overlayText),
+            trailing: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _checkOverlay,
+            ),
+          ),
+          const SizedBox(height: 10),
+          ListTile(
+            leading: const Icon(Icons.accessibility),
+            title: const Text("Accessibility services"),
+            subtitle: Text(aasText),
+            trailing: IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _checkAas,
+            ),
+          ),
+          const Divider(height: 32),
+          const Text(
+            "Manual actions",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: () => PkbScreenGuard.showOverlay(),
+            child: const Text("Show overlay"),
+          ),
+          ElevatedButton(
+            onPressed: () => PkbScreenGuard.hideOverlay(),
+            child: const Text("Hide overlay"),
+          ),
+          ElevatedButton(
+            onPressed: () => PkbScreenGuard.enableSecure(),
+            child: const Text("Enable FLAG_SECURE"),
+          ),
+          ElevatedButton(
+            onPressed: () => PkbScreenGuard.disableSecure(),
+            child: const Text("Disable FLAG_SECURE"),
+          ),
+          ElevatedButton(
+            onPressed: () => PkbScreenGuard.startMonitoring(),
+            child: const Text("Start monitoring"),
+          ),
+          ElevatedButton(
+            onPressed: () => PkbScreenGuard.stopMonitoring(),
+            child: const Text("Stop monitoring"),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: _checkAnyDeskRemote,
+            child: const Text("Check remote activity"),
+          ),
+          if (_remoteStatus != null)
+            Card(
+              child: ListTile(
+                leading: Icon(
+                  _remoteStatus!['remoteActive'] == true
+                      ? Icons.warning
+                      : Icons.check_circle,
+                  color: _remoteStatus!['remoteActive'] == true
+                      ? Colors.red
+                      : Colors.green,
+                ),
+                title: Text(
+                  _remoteStatus!['remoteActive'] == true
+                      ? "Remote activity detected"
+                      : "No remote activity detected",
+                ),
+                subtitle: Text(_remoteStatus.toString()),
+              ),
+            ),
+          const SizedBox(height: 20),
+          const Divider(),
+          const Text(
+            "Latest events",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 10),
+          if (_events.isEmpty)
+            const Text("No events yet")
+          else
+            ..._events.take(30).map(_buildEventTile),
+        ],
+      ),
+    );
+  }
 
-    private func handleScreenCaptureChanged() {
-        if #available(iOS 11.0, *) {
-            let captured = UIScreen.main.isCaptured
-            if captured {
-                print("[pkb_screen_guard] Screen is captured")
-                sendEvent(["event": "screenCaptured"])
-                showOverlay()
-            } else {
-                print("[pkb_screen_guard] Screen capture stopped")
-                sendEvent(["event": "screenCapturingStopped"])
-                hideOverlay()
-            }
-        }
-    }
+  Widget _buildEventTile(Map<String, dynamic> e) {
+    final ev = e['event'];
+    final ts = e['ts'];
+    final pkg = e['package'];
+    final score = e['score'];
 
-    // MARK: - External Display Handling
-
-    @objc private func screenDidConnect() {
-        print("[pkb_screen_guard] External display connected")
-        handleExternalDisplayChanged()
-    }
-
-    @objc private func screenDidDisconnect() {
-        print("[pkb_screen_guard] External display disconnected")
-        handleExternalDisplayChanged()
-    }
-
-    private func handleExternalDisplayChanged() {
-        let screens = UIScreen.screens
-        if screens.count > 1 {
-            print("[pkb_screen_guard] externalDisplayAttached")
-            sendEvent(["event": "externalDisplayAttached"])
-            showOverlay()
-        } else {
-            print("[pkb_screen_guard] externalDisplayDetached")
-            sendEvent(["event": "externalDisplayDetached"])
-            if #available(iOS 11.0, *) {
-                if !UIScreen.main.isCaptured {
-                    hideOverlay()
-                }
-            } else {
-                hideOverlay()
-            }
-        }
-    }
-
-    // MARK: - Jailbreak Detection (Heuristic)
-
-    private func isDeviceJailbroken() -> Bool {
-        #if targetEnvironment(simulator)
-        return false
-        #else
-        let fileManager = FileManager.default
-        let jailbreakPaths = [
-            "/Applications/Cydia.app",
-            "/Library/MobileSubstrate/MobileSubstrate.dylib",
-            "/bin/bash",
-            "/usr/sbin/sshd",
-            "/etc/apt",
-            "/private/var/lib/apt/"
-        ]
-
-        for path in jailbreakPaths {
-            if fileManager.fileExists(atPath: path) {
-                return true
-            }
-        }
-
-        let testPath = "/private/pkb_jb_test.txt"
-        do {
-            try "test".write(toFile: testPath, atomically: true, encoding: .utf8)
-            try fileManager.removeItem(atPath: testPath)
-            return true
-        } catch {
-        }
-
-        return false
-        #endif
-    }
-
-    // MARK: - Overlay (จอดำ + ข้อความเตือน)
-
-    private func showOverlay() {
-        DispatchQueue.main.async {
-            if self.overlayWindow == nil {
-
-                var window: UIWindow
-
-                if #available(iOS 13.0, *) {
-                    let scenes = UIApplication.shared.connectedScenes
-                        .compactMap { $0 as? UIWindowScene }
-                        .filter { $0.activationState == .foregroundActive }
-
-                    if let scene = scenes.first {
-                        window = UIWindow(windowScene: scene)
-                        window.frame = scene.coordinateSpace.bounds
-                    } else {
-                        window = UIWindow(frame: UIScreen.main.bounds)
-                    }
-                } else {
-                    window = UIWindow(frame: UIScreen.main.bounds)
-                }
-
-                window.windowLevel = UIWindow.Level.alert + 1
-                window.backgroundColor = UIColor.clear
-
-                let maskView = UIView(frame: window.bounds)
-                maskView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                maskView.backgroundColor = UIColor.black
-
-                let label = UILabel()
-                label.text = "ไม่อนุญาตให้บันทึกหน้าจอหรือแชร์หน้าจอ\nระหว่างใช้งานแอปนี้"
-                label.textColor = UIColor.white
-                label.font = UIFont.systemFont(ofSize: 18, weight: .semibold)
-                label.textAlignment = .center
-                label.numberOfLines = 0
-                label.translatesAutoresizingMaskIntoConstraints = false
-
-                maskView.addSubview(label)
-
-                NSLayoutConstraint.activate([
-                    label.centerXAnchor.constraint(equalTo: maskView.centerXAnchor),
-                    label.centerYAnchor.constraint(equalTo: maskView.centerYAnchor),
-                    label.leadingAnchor.constraint(equalTo: maskView.leadingAnchor, constant: 24),
-                    label.trailingAnchor.constraint(equalTo: maskView.trailingAnchor, constant: -24)
-                ])
-
-                window.isUserInteractionEnabled = true
-
-                window.addSubview(maskView)
-                window.isHidden = false
-                self.overlayWindow = window
-            } else {
-                self.overlayWindow?.isHidden = false
-            }
-
-            print("[pkb_screen_guard] showOverlay()")
-        }
-    }
-
-    private func hideOverlay() {
-        DispatchQueue.main.async {
-            self.overlayWindow?.isHidden = true
-            print("[pkb_screen_guard] hideOverlay()")
-        }
-    }
+    return Card(
+      child: ListTile(
+        title: Text('$ev'),
+        subtitle: Text(
+          "time: $ts"
+          "${pkg != null ? "\npackage: $pkg" : ""}"
+          "${score != null ? "\nscore: $score" : ""}",
+        ),
+      ),
+    );
+  }
 }
