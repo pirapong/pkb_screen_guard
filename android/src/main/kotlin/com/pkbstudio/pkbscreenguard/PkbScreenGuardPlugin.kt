@@ -507,3 +507,372 @@ class PkbScreenGuardPlugin : FlutterPlugin,
         eventSink = null
     }
 }
+
+//
+//package com.pkbstudio.pkbscreenguard
+//
+//import android.app.Activity
+//import android.content.Context
+//import android.hardware.display.DisplayManager
+//import android.os.Build
+//import android.provider.Settings
+//import android.view.MotionEvent
+//import android.view.View
+//import android.view.ViewGroup
+//import android.view.WindowManager
+//import android.widget.FrameLayout
+//import android.widget.TextView
+//import androidx.annotation.NonNull
+//import io.flutter.embedding.engine.plugins.FlutterPlugin
+//import io.flutter.embedding.engine.plugins.activity.ActivityAware
+//import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
+//import io.flutter.plugin.common.EventChannel
+//import io.flutter.plugin.common.MethodCall
+//import io.flutter.plugin.common.MethodChannel
+//import java.io.File
+//
+//class PkbScreenGuardPlugin : FlutterPlugin,
+//    MethodChannel.MethodCallHandler,
+//    ActivityAware,
+//    EventChannel.StreamHandler {
+//
+//    private lateinit var methodChannel: MethodChannel
+//    private lateinit var eventChannel: EventChannel
+//
+//    private var applicationContext: Context? = null
+//    private var activity: Activity? = null
+//    private var eventSink: EventChannel.EventSink? = null
+//
+//    private var overlayView: View? = null
+//
+//    @Volatile
+//    private var monitoring = false
+//    private var monitorThread: Thread? = null
+//
+//    @Volatile
+//    private var lastTouchObscured = false
+//
+//    // ------------------------------------------------------------------------
+//    // Remote / mirror packages
+//    // ------------------------------------------------------------------------
+//
+//    private val remotePkgs = listOf(
+//        "com.teamviewer.teamviewer.market.mobile",
+//        "com.teamviewer.quicksupport.market",
+//        "com.teamviewer.host.market",
+//        "com.anydesk.anydeskandroid",
+//        "com.chrome.remoteDesktop",
+//        "com.realvnc.viewer.android",
+//        "com.microsoft.rdc.androidx",
+//        "com.rsupport.rs.activity.rsupport.aos",
+//        "com.rsupport.mvagent",
+//        "com.splashtop.remote.skytap",
+//        "com.splashtop.personal",
+//        "com.zoho.assist",
+//        "com.bomgar.android",
+//        "com.islonline",
+//        "com.supremocontrol.supremo",
+//        "com.mikogo.remote",
+//        "com.remoteutilities.viewer",
+//        "com.airdroid.web",
+//        "com.airdroid.cast",
+//        "com.apowersoft.mirror",
+//        "com.apowersoft.mirror.free",
+//        "com.lespark.mirror",
+//        "com.letsview.letsview",
+//        "com.vysor",
+//        "com.koushikdutta.vysor"
+//    )
+//
+//    // ------------------------------------------------------------------------
+//    // FlutterPlugin
+//    // ------------------------------------------------------------------------
+//
+//    override fun onAttachedToEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+//        applicationContext = binding.applicationContext
+//        methodChannel = MethodChannel(binding.binaryMessenger, "pkb_screen_guard/methods")
+//        eventChannel = EventChannel(binding.binaryMessenger, "pkb_screen_guard/events")
+//        methodChannel.setMethodCallHandler(this)
+//        eventChannel.setStreamHandler(this)
+//    }
+//
+//    override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+//        methodChannel.setMethodCallHandler(null)
+//        eventChannel.setStreamHandler(null)
+//        applicationContext = null
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // ActivityAware
+//    // ------------------------------------------------------------------------
+//
+//    override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+//        activity = binding.activity
+//        attachRootTouchListener()
+//    }
+//
+//    override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+//        activity = binding.activity
+//        attachRootTouchListener()
+//    }
+//
+//    override fun onDetachedFromActivityForConfigChanges() {
+//        activity = null
+//    }
+//
+//    override fun onDetachedFromActivity() {
+//        activity = null
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // MethodChannel
+//    // ------------------------------------------------------------------------
+//
+//    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+//        when (call.method) {
+//
+//            "enableSecure" -> {
+//                runOnUi { act ->
+//                    act.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+//                }
+//                result.success(null)
+//            }
+//
+//            "disableSecure" -> {
+//                runOnUi { act ->
+//                    act.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+//                }
+//                result.success(null)
+//            }
+//
+//            "enableSecurityGuard" -> {
+//                runOnUi { act ->
+//                    applySecurityGuard(act)
+//                }
+//                result.success(null)
+//            }
+//
+//            "startMonitoring" -> {
+//                startMonitoring()
+//                result.success(null)
+//            }
+//
+//            "stopMonitoring" -> {
+//                stopMonitoring()
+//                result.success(null)
+//            }
+//
+//            "checkRooted" -> {
+//                result.success(isDeviceRooted())
+//            }
+//
+//            "showOverlay" -> {
+//                showOverlay()
+//                result.success(null)
+//            }
+//
+//            "hideOverlay" -> {
+//                hideOverlay()
+//                result.success(null)
+//            }
+//
+//            "checkOverlayStatus" -> {
+//                result.success(
+//                    mapOf(
+//                        "hasOverlay" to isDisplayOverAppsEnabled(),
+//                        "touchObscured" to lastTouchObscured
+//                    )
+//                )
+//            }
+//
+//            "checkRemoteActive" -> {
+//                result.success(checkRemoteActive())
+//            }
+//
+//            else -> result.notImplemented()
+//        }
+//    }
+//
+//    private fun runOnUi(block: (Activity) -> Unit) {
+//        val act = activity ?: return
+//        act.runOnUiThread { block(act) }
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // Security guard
+//    // ------------------------------------------------------------------------
+//
+//    private fun applySecurityGuard(act: Activity) {
+//        act.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+//
+//        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+//            act.window.setHideOverlayWindows(true)
+//        }
+//
+//        setFilterTouchesRecursive(act.window.decorView.rootView)
+//        attachRootTouchListener()
+//    }
+//
+//    private fun attachRootTouchListener() {
+//        val root = activity?.window?.decorView?.rootView ?: return
+//        root.setOnTouchListener { _, ev ->
+//            lastTouchObscured = isMotionEventObscured(ev)
+//            false
+//        }
+//    }
+//
+//    private fun setFilterTouchesRecursive(view: View?) {
+//        if (view == null) return
+//        view.filterTouchesWhenObscured = true
+//        if (view is ViewGroup) {
+//            for (i in 0 until view.childCount) {
+//                setFilterTouchesRecursive(view.getChildAt(i))
+//            }
+//        }
+//    }
+//
+//    private fun isMotionEventObscured(ev: MotionEvent): Boolean {
+//        val f = ev.flags
+//        return (f and MotionEvent.FLAG_WINDOW_IS_OBSCURED) != 0 ||
+//                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+//                        (f and MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED) != 0)
+//    }
+//
+//    private fun isDisplayOverAppsEnabled(): Boolean {
+//        val ctx = applicationContext ?: return false
+//        return Settings.canDrawOverlays(ctx)
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // Monitoring
+//    // ------------------------------------------------------------------------
+//
+//    private fun startMonitoring() {
+//        if (monitoring) return
+//        monitoring = true
+//
+//        monitorThread = Thread {
+//            var lastPkg: String? = null
+//            while (monitoring) {
+//                val pkg = detectRemoteControlApp()
+//                if (pkg != null && pkg != lastPkg) {
+//                    lastPkg = pkg
+//                    sendEventOnUi(
+//                        mapOf(
+//                            "event" to "remoteAppDetected",
+//                            "package" to pkg
+//                        )
+//                    )
+//                    showOverlay()
+//                }
+//                Thread.sleep(1500)
+//            }
+//        }
+//        monitorThread?.start()
+//    }
+//
+//    private fun stopMonitoring() {
+//        monitoring = false
+//        monitorThread?.interrupt()
+//        monitorThread = null
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // Root
+//    // ------------------------------------------------------------------------
+//
+//    private fun isDeviceRooted(): Boolean {
+//        return Build.TAGS?.contains("test-keys") == true ||
+//                File("/system/xbin/su").exists()
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // Remote detection
+//    // ------------------------------------------------------------------------
+//
+//    private fun detectRemoteControlApp(): String? {
+//        val pm = applicationContext?.packageManager ?: return null
+//        for (pkg in remotePkgs) {
+//            try {
+//                pm.getPackageInfo(pkg, 0)
+//                return pkg
+//            } catch (_: Exception) {}
+//        }
+//        return null
+//    }
+//
+//    private fun isExternalDisplayConnected(): Boolean {
+//        val dm = applicationContext
+//            ?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+//        return dm?.displays?.size ?: 0 > 1
+//    }
+//
+//    private fun checkRemoteActive(): Map<String, Any> {
+//        val pkg = detectRemoteControlApp() ?: return mapOf("remoteActive" to false)
+//        return mapOf(
+//            "remoteActive" to true,
+//            "remotePackage" to pkg,
+//            "externalDisplay" to isExternalDisplayConnected()
+//        )
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // Overlay
+//    // ------------------------------------------------------------------------
+//
+//    private fun showOverlay() {
+//        val act = activity ?: return
+//        act.runOnUiThread {
+//            val root = act.window.decorView as ViewGroup
+//
+//            if (overlayView == null) {
+//                val container = FrameLayout(act)
+//                container.setBackgroundColor(0xFF000000.toInt())
+//
+//                val tv = TextView(act)
+//                tv.text = "ไม่อนุญาตให้บันทึกหรือควบคุมหน้าจอ"
+//                tv.setTextColor(0xFFFFFFFF.toInt())
+//                tv.textSize = 18f
+//                tv.gravity = android.view.Gravity.CENTER
+//                tv.textAlignment = View.TEXT_ALIGNMENT_CENTER
+//
+//                container.addView(
+//                    tv,
+//                    FrameLayout.LayoutParams(
+//                        FrameLayout.LayoutParams.MATCH_PARENT,
+//                        FrameLayout.LayoutParams.MATCH_PARENT
+//                    )
+//                )
+//
+//                overlayView = container
+//                root.addView(container)
+//            } else {
+//                overlayView?.visibility = View.VISIBLE
+//            }
+//        }
+//    }
+//
+//    private fun hideOverlay() {
+//        activity?.runOnUiThread {
+//            overlayView?.visibility = View.GONE
+//        }
+//    }
+//
+//    // ------------------------------------------------------------------------
+//    // EventChannel (MAIN THREAD SAFE)
+//    // ------------------------------------------------------------------------
+//
+//    private fun sendEventOnUi(map: Map<String, Any>) {
+//        activity?.runOnUiThread {
+//            eventSink?.success(map)
+//        }
+//    }
+//
+//    override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+//        eventSink = events
+//    }
+//
+//    override fun onCancel(arguments: Any?) {
+//        eventSink = null
+//    }
+//}

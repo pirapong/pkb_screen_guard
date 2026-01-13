@@ -41,5 +41,20 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
+        <!-- ============================= -->
+        <!-- Remote / Accessibility tools -->
+        <!-- ============================= -->
+
+        <package android:name="com.anydesk.anydeskandroid" />
+        <package android:name="com.teamviewer.teamviewer.market.mobile" />
+        <package android:name="com.teamviewer.quicksupport.market" />
+        <package android:name="com.teamviewer.host.market" />
+        <package android:name="com.airdroid.cast" />
+        <package android:name="com.airdroid.web" />
+        <package android:name="com.vysor" />
+        <package android:name="com.koushikdutta.vysor" />
+        <package android:name="com.letsview.letsview" />
+        <package android:name="com.apowersoft.mirror" />
     </queries>
 </manifest>

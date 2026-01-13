@@ -9,3 +9,12 @@
 - Improved overlay protection against screen recording and screen sharing.
 - Added security events for remote detection via EventChannel.
 - Minor stability improvements and internal refactoring.
+
+## 0.0.3
+- Added accessibility (A11Y) service detection using whitelist and blacklist strategy.
+- Added detection of suspicious accessibility services commonly used for remote control and automation.
+- Added manual accessibility status check via `checkAccessibilityServices`.
+- Automatically blocks screen when suspicious accessibility services are detected.
+- Improved protection against overlay, tapjacking, and screen capture attacks.
+- Improved Android 11+ compatibility with package visibility (`<queries>`).
+- Minor performance and stability improvements.
