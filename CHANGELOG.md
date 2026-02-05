@@ -18,3 +18,10 @@
 - Improved protection against overlay, tapjacking, and screen capture attacks.
 - Improved Android 11+ compatibility with package visibility (`<queries>`).
 - Minor performance and stability improvements.
+
+## 0.0.4
+- Added iOS screenshot detection with auto overlay and exit flow.
+- Added screen recording / mirroring detection for iOS.
+- Added manual Accessibility scan API.
+- Improved Android overlay and remote control detection.
+- Stability improvements and refactoring.

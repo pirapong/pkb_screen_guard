@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "pkb_screen_guard",
-      "version": "0.0.2",
+      "version": "0.0.3",
       "dependencies": [
         "flutter"
       ],
